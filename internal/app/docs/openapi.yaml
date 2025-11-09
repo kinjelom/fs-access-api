@@ -1,0 +1,825 @@
+openapi: 3.0.3
+info:
+  title: fs-access-api
+  version: "1.0"
+  description: >
+    Administrative API for managing filesystem access entities such as users and groups.<br>
+    All non-public endpoints require authentication using either the **HMAC** or **Bearer** scheme (depending on the configuration).<br>
+    The **Bearer** scheme requires the headers `X-Api-Key` and `Authorization`.<br>
+    The **HMAC** scheme requires the headers `X-Api-Key`, `Authorization`, `X-Timestamp`, and `X-Content-Sha256`.
+
+servers:
+  - url: /
+
+components:
+  parameters:
+    GroupnameParam:
+      name: groupname
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Groupname' }
+      description: Group identifier. Slash not allowed.
+    UsernameParam:
+      name: username
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Username' }
+      description: Resource identifier (username). Slash not allowed.
+    DirnameParam:
+      name: dirname
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Dirname' }
+      description: Resource identifier (dirname). Slash not allowed.
+
+  headers:
+    LocationHeader:
+      description: URL of the created resource
+      schema: { type: string, format: uri }
+
+  securitySchemes:
+    XApiKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: API key identifier used to select the matching secret.
+    Authorization:
+      type: apiKey
+      in: header
+      name: authorization
+      description: >
+        For HMAC authentication: use `Authorization: HMAC <hex-signature>`  
+        For Bearer authentication: use `Authorization: Bearer <api-secret>`
+    XTimestamp:
+      type: apiKey
+      in: header
+      name: x-timestamp
+      description: >
+        For HMAC authentication: must be `timestamp=<unix-timestamp>`  
+        (used to prevent replay attacks).  
+        Omit this header when using Bearer authentication.
+    XContentSha256:
+      type: apiKey
+      in: header
+      name: x-content-sha256
+      description: >
+        For HMAC authentication: must be `sha256=<hex-digest>`  
+        (the SHA-256 hash of the request body).  
+        Omit this header when using Bearer authentication.
+
+  responses:
+    Unauthorized:
+      description: Missing/invalid authentication
+    Forbidden:
+      description: Insufficient permissions
+    Ok:
+      description: ok
+    Created:
+      description: Created
+      headers:
+        Location:
+          $ref: '#/components/headers/LocationHeader'
+    Updated:
+      description: Updated
+      headers:
+        Location:
+          $ref: '#/components/headers/LocationHeader'
+    Deleted:
+      description: Deleted
+    NoContent:
+      description: No content
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Conflict — resource exists with different data
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+
+    Error:
+      type: object
+      additionalProperties: false
+      properties:
+        code: { type: string, example: USER_CONFLICT }
+        message: { type: string }
+      required: [ code, message ]
+
+    RelativePath:
+      type: string
+      nullable: false
+      minLength: 1
+      maxLength: 1024
+      pattern: '^[A-Za-z0-9._-][A-Za-z0-9._/-]*$'
+      description: >
+        Relative path string that must not start with a slash (`/`) and must not
+        contain spaces. Allowed characters: letters, digits, dot (`.`), underscore (`_`),
+        hyphen (`-`), and slash (`/`).  
+    
+    Description:
+      type: string
+      nullable: true
+      maximum: 255
+
+    UID:
+      type: integer
+      nullable: false
+      format: uint32
+      minimum: 2000
+      maximum: 4294967295
+
+    GID:
+      type: integer
+      nullable: false
+      format: uint32
+      minimum: 2000
+      maximum: 4294967295
+
+    Groupname:
+      type: string
+      nullable: false
+      minimum: 2
+      maximum: 128
+      pattern: '^[A-Za-z0-9._-]+$'
+      description: Group name. Slash (/) is not allowed.
+
+    Username:
+      type: string
+      nullable: false
+      minimum: 2
+      maximum: 128
+      pattern: '^[A-Za-z0-9._-]+$'
+      description: Username. Slash (/) is not allowed.
+
+    Dirname:
+      type: string
+      nullable: false
+      minimum: 2
+      maximum: 128
+      pattern: '^[A-Za-z0-9._-]+$'
+      description: Directory name. Slash (/) is not allowed.
+
+    HealthStatusResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ banner, healthy, started_at, uptime_sec ]
+      properties:
+        banner:
+          type: string
+          description: "Optional service banner or version string (present when healthy)."
+        healthy:
+          type: boolean
+          description: "Overall health status"
+        reason:
+          type: string
+          nullable: true
+          description: "Reason for being unhealthy (only set when status='unhealthy')."
+        started_at:
+          type: string
+          format: date-time
+          description: "Timestamp when the service started."
+        uptime_sec:
+          type: integer
+          format: int64
+          description: "Service uptime in seconds."
+
+    GenerateSecretResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ size_bytes, hex, base64url ]
+      properties:
+        size_bytes:
+          type: integer
+          description: "Number of bytes used to generate the secret."
+        hex:
+          type: string
+          description: "Secret encoded as lowercase hexadecimal."
+        base64url:
+          type: string
+          description: "Secret encoded using URL-safe Base64."
+
+    HashAlgorithm:
+      type: string
+      description: Hash algorithm identifier.
+      enum: [ crypt-md5, crypt-apr1, crypt-sha256, crypt-sha512, raw-md5, raw-sha1, raw-sha256, raw-sha512 ]
+
+    ComputeHashRequestBody:
+      type: object
+      additionalProperties: false
+      required: [ algorithm, plaintext ]
+      properties:
+        algorithm:
+          $ref: '#/components/schemas/HashAlgorithm'
+        rounds:
+          type: integer
+          description: |
+            Iteration count. Required/used for crypt (crypt-sha256/crypt-sha512).
+            Ignored for crypt-md5, crypt-apr1 and raw algorithms..
+            Valid range for is 1 000..1 000 000.
+          minimum: 1000
+          maximum: 1000000
+        saltLen:
+          type: integer
+          description: "Salt length for crypt salt generation"
+          minimum: 1
+          maximum: 16
+        plaintext:
+          type: string
+          description: Plaintext to hash (server never stores plaintext).
+          writeOnly: true
+          minLength: 1
+
+    ComputeHashResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ algorithm, hash ]
+      properties:
+        algorithm:
+          $ref: '#/components/schemas/HashAlgorithm'
+        hash:
+          type: string
+          description: Full hash, e.g. "$6$rounds=5000$<salt>$<digest>"
+
+    VerifyHashRequestBody:
+      type: object
+      additionalProperties: false
+      required: [ hash, plaintext ]
+      properties:
+        hash:
+          type: string
+          description: |
+            Supports: "$1$", "$apr1$", "$5$", "$6$".
+            Optionally raw hex digests (32=MD5, 40=SHA-1, 64=SHA-256, 128=SHA-512).
+            MD5/SHA-1 are supported as legacy and are not recommended.
+        plaintext:
+          type: string
+          description: Plaintext candidate to verify against the stored hash.
+          writeOnly: true
+          minLength: 1
+
+    VerifyHashResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ verified, detected_algorithm ]
+      properties:
+        verified:
+          type: boolean
+          description: Whether the plaintext matches the hash.
+        detected_algorithm:
+          type: string
+          description: Detected hash algorithm name (may be "unknown" for non-enum formats).
+        error:
+          type: string
+          nullable: true
+          description: Optional diagnostic message when verification fails or the format is unsupported.
+
+    GroupInfo:
+      type: object
+      additionalProperties: false
+      required: [ groupname, description, gid, home, chmod-spec ]
+      properties:
+        groupname: { $ref: '#/components/schemas/Groupname' }
+        gid: { $ref: '#/components/schemas/GID' }
+        description: { $ref: '#/components/schemas/Description' }
+        home: { $ref: '#/components/schemas/RelativePath' }
+
+    EnsureGroupRequestBody:
+      type: object
+      additionalProperties: false
+      required: [ gid ]
+      properties:
+        gid: { $ref: '#/components/schemas/GID' }
+        description: { $ref: '#/components/schemas/Description' }
+        home: { $ref: '#/components/schemas/RelativePath' }
+
+    SetGroupDescriptionRequestBody:
+      type: object
+      additionalProperties: false
+      required: [ description ]
+      properties:
+        description: { $ref: '#/components/schemas/Description' }
+
+    UserInfo:
+      type: object
+      additionalProperties: false
+      required: [ username, uid, description, groupname, gid, home, disabled ]
+      properties:
+        username: { $ref: '#/components/schemas/Username' }
+        uid: { $ref: '#/components/schemas/UID' }
+        description: { $ref: '#/components/schemas/Description' }
+        groupname: { $ref: '#/components/schemas/Groupname' }
+        gid: { $ref: '#/components/schemas/GID' }
+        home: { $ref: '#/components/schemas/RelativePath' }
+        expiration: { type: string, format: date-time, nullable: true }
+        disabled: { type: boolean }
+
+    EnsureUserRequestBody:
+      type: object
+      additionalProperties: false
+      required: [ groupname, password, password_is_hash ]
+      properties:
+        description: { $ref: '#/components/schemas/Description' }
+        groupname: { $ref: '#/components/schemas/Groupname' }
+        home: { $ref: '#/components/schemas/RelativePath' }
+        expiration: { type: string, format: date-time, nullable: true }
+        disabled: { type: boolean, default: false }
+        password:
+          type: string
+          writeOnly: true
+          minLength: 8
+          description: >
+            Plaintext or final hash depending on `password_is_hash`.
+        password_is_hash:
+          type: boolean
+          writeOnly: true
+          description: >
+            When true, `password` is treated as a final hash; otherwise it will be hashed server-side.
+
+    SetDescriptionRequestBody:
+      type: object
+      additionalProperties: false
+      required: [ description ]
+      properties:
+        description: { $ref: '#/components/schemas/Description' }
+
+    SetUserPasswordRequestBody:
+      type: object
+      additionalProperties: false
+      required: [ password, password_is_hash ]
+      properties:
+        password:
+          type: string
+          writeOnly: true
+          minLength: 8
+          description: >
+            User password input. If `password_is_hash=false`, the server will hash
+            it using the default algorithm. If `password_is_hash=true`, the value
+            must already be a final hash.
+        password_is_hash:
+          type: boolean
+          writeOnly: true
+          description: >
+            When true, `password` is treated as a final hash value. When false,
+            the server will hash the given plaintext password before storing it.
+
+    SetUserExpirationRequestBody:
+      type: object
+      additionalProperties: false
+      required: [ expiration ]
+      properties:
+        expiration: { type: string, format: date-time, nullable: true }
+
+    SetUserDisabledRequestBody:
+      type: object
+      additionalProperties: false
+      required: [ disabled ]
+      properties:
+        disabled: { type: boolean }
+
+
+security:
+  - XApiKey: [ ]
+    Authorization: [ ]
+    XTimestamp: [ ]
+    XContentSha256: [ ]
+
+paths:
+  /api/health:
+    get:
+      operationId: Health
+      summary: Health check
+      tags: [ Public ]
+      security: [ ]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatusResponseBody"
+        "503":
+          description: service unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatusResponseBody"
+
+  /api/secret:
+    get:
+      operationId: GenerateSecret
+      summary: Random secret generator
+      description: Cryptographically-strong random secret generator (generated secrets are not persisted)
+      tags: [ Crypto ]
+      security: [ ]
+      parameters:
+        - in: query
+          name: size
+          schema: { type: integer, minimum: 16, maximum: 128, default: 32 }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateSecretResponseBody"
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/crypto/hash:
+    post:
+      operationId: ComputeHash
+      summary: Compute a crypt(3) plaintext hash
+      description: |
+        Computes a crypt(3) hash using the selected algorithm and salt.
+        - crypt-md5 -> "$1$"
+        - crypt-apr1 -> "$apr1$"
+        - crypt-sha256 -> "$5$" (respects rounds)
+        - crypt-sha512 -> "$6$" (respects rounds)
+      tags: [ Crypto ]
+      security: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ComputeHashRequestBody' }
+      responses:
+        '200':
+          description: Hash computed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ComputeHashResponseBody' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/crypto/verify:
+    post:
+      operationId: VerifyHash
+      summary: Verify a plaintext against a stored hash
+      description: |
+        Verifies whether the provided plaintext matches the stored hash.
+        Supports crypt(3) ($1$ / $apr1$ / $5$ / $6$). Optionally accepts raw hex digests (MD5/SHA1/SHA256/SHA512).
+      tags: [ Crypto ]
+      security: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyHashRequestBody' }
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerifyHashResponseBody' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/groups:
+    get:
+      operationId: ListGroups
+      description: List groups
+      tags: [ Groups ]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupInfo'
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/groups/{groupname}:
+    parameters:
+      - $ref: '#/components/parameters/GroupnameParam'
+    get:
+      operationId: GetGroup
+      description: Get group details
+      tags: [ Groups ]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupInfo' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+
+    put:
+      operationId: EnsureGroup
+      summary: Create-or-ensure group (idempotent)
+      description: |
+        Creates the group if it does not exist.
+      tags: [ Groups ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EnsureGroupRequestBody' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '201': { $ref: '#/components/responses/Created' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+    delete:
+      operationId: DeleteGroup
+      description: Delete group
+      tags: [ Groups ]
+      responses:
+        "204": { $ref: '#/components/responses/Deleted' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/groups/{groupname}/description:
+    parameters:
+      - $ref: '#/components/parameters/GroupnameParam'
+    put:
+      operationId: SetGroupDescription
+      summary: Set or change group description
+      tags: [ Groups ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetDescriptionRequestBody' }
+      responses:
+        "204": { $ref: '#/components/responses/NoContent' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/users:
+    get:
+      operationId: ListUsers
+      summary: List users (without passwords)
+      tags: [ Users ]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserInfo'
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/users/{username}:
+    parameters:
+      - $ref: '#/components/parameters/UsernameParam'
+    get:
+      operationId: GetUser
+      summary: Get user details (without password)
+      tags: [ Users ]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserInfo' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+    put:
+      operationId: EnsureUser
+      summary: Create-or-ensure user (idempotent)
+      description: |
+        Ensures the user identified by `{username}` exists with the requested state.
+      tags: [ Users ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EnsureUserRequestBody' }
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '201': { $ref: '#/components/responses/Created' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+    delete:
+      operationId: DeleteUser
+      summary: Delete user
+      tags: [ Users ]
+      responses:
+        "204": { $ref: '#/components/responses/Deleted' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/users/{username}/description:
+    parameters:
+      - $ref: '#/components/parameters/UsernameParam'
+    put:
+      operationId: SetUserDescription
+      summary: Set or change user description
+      tags: [ Users ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetDescriptionRequestBody' }
+      responses:
+        "204": { $ref: '#/components/responses/NoContent' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/users/{username}/password:
+    parameters:
+      - $ref: '#/components/parameters/UsernameParam'
+    put:
+      operationId: SetUserPassword
+      summary: Set or change user password
+      description: Sets new password without requiring the previous one.
+      tags: [ Users ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetUserPasswordRequestBody' }
+      responses:
+        "204": { $ref: '#/components/responses/NoContent' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/users/{username}/expiration:
+    parameters:
+      - $ref: '#/components/parameters/UsernameParam'
+    put:
+      operationId: SetUserExpiration
+      summary: Set or change user expiration
+      tags: [ Users ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetUserExpirationRequestBody' }
+      responses:
+        "204": { $ref: '#/components/responses/NoContent' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/users/{username}/disabled:
+    parameters:
+      - $ref: '#/components/parameters/UsernameParam'
+    put:
+      operationId: SetUserDisabled
+      summary: Set or change user disabled status
+      tags: [ Users ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetUserDisabledRequestBody' }
+      responses:
+        "204": { $ref: '#/components/responses/NoContent' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/users/{username}/directories:
+    parameters:
+      - $ref: '#/components/parameters/UsernameParam'
+    get:
+      operationId: ListUserDirs
+      summary: List user top-level directories
+      tags: [ Directories ]
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Dirname'
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/users/{username}/directories/{dirname}:
+    parameters:
+      - $ref: '#/components/parameters/UsernameParam'
+      - $ref: '#/components/parameters/DirnameParam'
+
+    put:
+      operationId: EnsureUserDir
+      summary: Create-or-ensure user directory (idempotent)
+      description: |
+        Ensures the user's top-level directory identified by `{dirname}` exists with the requested state.
+      tags: [ Directories ]
+      responses:
+        '200': { $ref: '#/components/responses/Updated' }
+        '201': { $ref: '#/components/responses/Created' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+    delete:
+      operationId: DeleteUserDir
+      summary: Delete user top-level directory if doesn't contain any files
+      tags: [ Directories ]
+      responses:
+        "204": { $ref: '#/components/responses/Deleted' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        "500": { $ref: '#/components/responses/InternalServerError' }
+
+  /api/authz/lookup/{username}:
+    get:
+      operationId: AuthzLookupUser
+      parameters:
+        - $ref: '#/components/parameters/UsernameParam'
+      summary: Lookup user POSIX attributes
+      tags: [ Authz ]
+      responses:
+        "204":
+          description: Found (user enabled). Attributes via headers (no body).
+          headers:
+            x-fs-uid: { schema: { type: integer, minimum: 0, maximum: 4294967295 } }
+            x-fs-gid: { schema: { type: integer, minimum: 0, maximum: 4294967295 } }
+            x-fs-dir: { schema: { type: string } }
+            x-fs-shell: { schema: { type: string } }
+            x-fs-gecos: { schema: { type: string } }
+        "400": { description: Bad request }
+        "401": { description: API client not authenticated }
+        "404": { description: Not found or disabled }
+        "500": { description: Internal Server error }
+
+  /api/authz/auth/{username}:
+    post:
+      operationId: AuthzAuthUser
+      parameters:
+        - $ref: '#/components/parameters/UsernameParam'
+      summary: "Authenticate user, ensure the account is not locked."
+      tags: [ Authz ]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [ password ]
+              properties:
+                password: { type: string }
+                client_ip: { type: string, format: ipv4 }
+                server_ip: { type: string, format: ipv4 }
+                protocol: { type: string }
+      responses:
+        "204":
+          description: Authenticated and enabled (no body).
+        "400": { description: Bad request }
+        "401": { description: API client not authenticated. }
+        "403": { description: User authentication failed (invalid username/password). }
+        "423": { description: User account is disabled. }
+        "500": { description: Internal Server error }

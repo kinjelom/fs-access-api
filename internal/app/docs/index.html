@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>File System Access API Server</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/default.min.css">
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 2em;
+            background: #f7f7f7;
+            color: #333;
+        }
+        h1 { margin-bottom: 0.5em; }
+        .doclink {
+            background: #fff;
+            padding: 1em;
+            margin: 1em 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        a {
+            font-weight: bold;
+            color: #0055aa;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/go.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/java.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+<body>
+<h1>File System Access API  Documentation</h1>
+
+<div class="doclink">
+    <a href="/docs/redoc" target="_blank">ReDoc UI</a>
+    <p>A clean and readable interface for browsing the OpenAPI specification.
+        Great for developers who want to explore endpoints, models, and parameters.</p>
+</div>
+
+<div class="doclink">
+    <a href="/docs/swagger" target="_blank">Swagger UI</a>
+    <p>An interactive environment for testing API calls directly in the browser.
+        Allows you to send requests, provide parameters, and view responses instantly.</p>
+</div>
+<hr>
+<h2>Use Cases</h2>
+
+<h3>Generate Go Client</h3>
+
+<pre><code class="language-bash">
+oapi-codegen -generate types  -o internal/api/types.gen.go  -package api docs/openapi.yaml
+oapi-codegen -generate client -o internal/api/client.gen.go -package api docs/openapi.yaml
+</code></pre>
+
+<h3>Generate Java Client</h3>
+
+<b>build.gradle</b>
+
+<pre><code class="language-gradle">
+plugins {
+    id 'java'
+    id "org.openapi.generator" version "7.15.0"
+}
+
+repositories { mavenCentral() }
+
+openApiGenerate {
+    inputSpec.set("$projectDir/openapi.yaml")
+    generatorName.set("java")
+    library.set("okhttp-gson")
+    apiPackage.set("org.proftpd.admin.api")
+    modelPackage.set("org.proftpd.admin.api.model")
+    invokerPackage.set("org.proftpd.admin.api.client")
+}
+
+tasks.compileJava { dependsOn("openApiGenerate") }
+sourceSets.main.java.srcDir("$buildDir/generate-resources/main/src/main/java")
+</code></pre>
+
+<pre><code class="language-bash">
+./gradlew openApiGenerate
+</code></pre>
+
+
+<h3>Bash Example</h3>
+
+<pre><code class="language-bash">
+export BASE_URL="http://localhost:8080"
+export API_KEY_ID="key1"
+export API_KEY_SECRET="77f280ba374a80132dfe7ddaba5af72476be5ba34477448fff901ebc804e4b1e" # hex
+</code></pre>
+
+<h4>Bearer Authorization</h4>
+<pre><code class="language-bash">
+curl -sS "${BASE_URL}/api/users" -H "X-Api-Key: $API_KEY_ID" -H "Authorization: Bearer $API_KEY_SECRET" | jq
+</code></pre>
+
+<h4>HMAC Authorization</h4>
+
+<pre><code class="language-bash">
+function calculate_hmac() {
+    local KEY_SECRET="$1"
+    local METHOD="$2"
+    local PATH_WITH_QUERY="$3"
+    local BODY="$4"
+
+    export HMAC_TS
+    export HMAC_BODY_HASH
+    export HMAC_SIG
+
+    # timestamp RFC3339 (UTC)
+    HMAC_TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    # body hash
+    HMAC_BODY_HASH="$(printf "%s" "$BODY" | openssl dgst -sha256 -hex | awk '{print $2}')"
+    # canonical string
+    # METHOD \n PATH_WITH_QUERY \n TIMESTAMP \n SHA256_HEX(body)
+    local CANONICAL="$(printf "%s\n%s\n%s\n%s" "$METHOD" "$PATH_WITH_QUERY" "$HMAC_TS" "$HMAC_BODY_HASH")"
+    # signature HMAC-SHA256 in hex
+    HMAC_SIG="$(printf "%s" "$CANONICAL" | openssl dgst -sha256 -mac HMAC -macopt "hexkey:${KEY_SECRET}" -hex | awk '{print $2}')"
+}
+
+
+calculate_hmac "$API_KEY_SECRET" "GET" "/api/users" ""; echo "TS: $HMAC_TS, BODY_HASH: $HMAC_BODY_HASH, SIG: $HMAC_SIG"
+
+curl -sS "${BASE_URL}/api/users" -H "X-Api-Key: $API_KEY_ID" -H "X-Timestamp: $HMAC_TS" -H "X-Content-Sha256: $HMAC_BODY_HASH" -H "Authorization: HMAC $HMAC_SIG" | jq
+</code></pre>
+
+</body>
+</html>

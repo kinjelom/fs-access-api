@@ -1,0 +1,72 @@
+http_server:
+  listen_address: ":8080"
+  unix_socket_path: ""
+  telemetry_path: "/metrics"
+  banner: "fs-access-api/mysql"
+security:
+  authenticator:
+    enabled_authenticators: [hmac, bearer]
+    window_seconds: 60
+    access_keys:
+      key1: 77f280ba374a80132dfe7ddaba5af72476be5ba34477448fff901ebc804e4b1e
+      key2: d8a949526533f94bc73aaf8830ae325b4cb7609dc0b54cde583aed07db084fbf
+  hasher:
+    default_algorithm: "crypt-sha256"
+    default_rounds: 5000
+    default_salt_len: 16
+storage:
+  implementation: "unix"
+  homes_base_dir: /tmp/fs-access-api-test-homes
+  create_homes_base_dir: true
+  default_user_top_dirs: [ _test ]
+account_repository:
+  common:
+    min_uid: 2000
+    min_gid: 2000
+  type: mysql
+  mysql:
+    host: ${FSAA_MYSQL_HOST}
+    port: ${FSAA_MYSQL_PORT:-3306}
+    user: ${FSAA_MYSQL_USER}
+    password: ${FSAA_MYSQL_PASSWORD}
+    database: ${FSAA_MYSQL_DATABASE}
+    ignore_ssl: ${FSAA_MYSQL_IGNORE_SSL:-true}
+    ssl_ca_path: ${FSAA_MYSQL_SSL_CA_PATH}
+    query_timeout: 5s
+    write_timeout: 5s
+  load_initial_data: true
+  initial_data:
+    groups:
+      default:
+        home: default
+        gid: 4000
+        description: "built-in"
+    users:
+      operator:
+        password: "098f6bcd4621d373cade4e832627b4f6" # test
+        password_is_hash: true
+        uid: 2001
+        groupname: default
+        description: "default operator"
+        home: .
+      demo-a:
+        password: "098f6bcd4621d373cade4e832627b4f6"
+        password_is_hash: true
+        uid: 2002
+        groupname: default
+        description: "demo a"
+        home: demo-a
+      demo-b1:
+        password: "098f6bcd4621d373cade4e832627b4f6"
+        password_is_hash: true
+        uid: 2003
+        groupname: default
+        description: "demo b1"
+        home: demo-b
+      demo-b2:
+        password: "098f6bcd4621d373cade4e832627b4f6"
+        password_is_hash: true
+        uid: 2004
+        groupname: default
+        description: "demo b2"
+        home: demo-b

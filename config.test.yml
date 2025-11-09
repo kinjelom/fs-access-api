@@ -1,0 +1,110 @@
+http_server:
+  listen_address: ":8080"
+  unix_socket_path: ""
+  telemetry_path: "/metrics"
+  banner: "fs-access-api/inmem"
+storage:
+  implementation: "inmem"
+  homes_base_dir: TEST_TEMP_DIR_PLACEHOLDER/homes
+  create_homes_base_dir: true
+  default_user_top_dirs: [ _test ]
+security:
+  authenticator:
+    enabled_authenticators: [ hmac, bearer ]
+    window_seconds: 60
+    access_keys:
+      key1: 77f280ba374a80132dfe7ddaba5af72476be5ba34477448fff901ebc804e4b1e
+      key2: d8a949526533f94bc73aaf8830ae325b4cb7609dc0b54cde583aed07db084fbf
+  hasher:
+    default_algorithm: "crypt-sha256"
+    default_rounds: 5000
+    default_salt_len: 16
+account_repository:
+  common:
+    min_uid: 2000
+    min_gid: 4000
+  type: sqlite
+  sqlite:
+    db_file_path: TEST_TEMP_DIR_PLACEHOLDER/db/fs-access-api.test.db
+    create_db_dir: true
+    query_timeout: 5s
+    write_timeout: 5s
+  load_initial_data: true
+  initial_data:
+    groups:
+      default:
+        home: default
+        gid: 4000
+        description: "built-in"
+      group-a:
+        home: a
+        gid: 4001
+        description: "Group A"
+      group-b:
+        home: b
+        gid: 4002
+        description: "Group B"
+    users:
+      operator-a:
+        password: "098f6bcd4621d373cade4e832627b4f6" # test
+        password_is_hash: true
+        uid: 2001
+        groupname: group-a
+        description: "operator a"
+        home: .
+        expiration: "2074-09-24T00:00:00Z"
+        disabled: false
+      user-a1:
+        password: "098f6bcd4621d373cade4e832627b4f6"
+        password_is_hash: true
+        uid: 2002
+        groupname: group-a
+        description: "a1"
+        home: user-a1
+        expiration: "2024-09-24T00:00:00Z"
+        disabled: false
+      user-a2:
+        password: "098f6bcd4621d373cade4e832627b4f6"
+        password_is_hash: true
+        uid: 2003
+        groupname: group-a
+        description: "a2"
+        home: user-a2
+        expiration: ~
+        disabled: true
+      operator-b:
+        password: "098f6bcd4621d373cade4e832627b4f6" # test
+        password_is_hash: true
+        uid: 2004
+        groupname: group-b
+        description: "operator b"
+        home: .
+        expiration: ~
+        disabled: false
+      user-b1:
+        password: "098f6bcd4621d373cade4e832627b4f6"
+        password_is_hash: true
+        uid: 2005
+        groupname: group-b
+        description: "b1"
+        home: user-b1
+        expiration: ~
+        disabled: false
+      user-b2:
+        password: "098f6bcd4621d373cade4e832627b4f6"
+        password_is_hash: true
+        uid: 2006
+        groupname: group-b
+        description: "bx"
+        home: user-bx
+        expiration: ~
+        disabled: false
+      user-b3:
+        password: "098f6bcd4621d373cade4e832627b4f6"
+        password_is_hash: true
+        uid: 2007
+        groupname: group-b
+        description: "bx"
+        home: user-bx
+        expiration: ~
+        disabled: false
