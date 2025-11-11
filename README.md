@@ -2,20 +2,17 @@
 
 Administrative API for managing filesystem access entities such as users and groups.
 
-API Documentation:
+API Documentation: [openapi.yaml](internal/app/docs/openapi.yaml)
 
-- http://127.0.0.1:8080/docs
-- http://127.0.0.1:8080/openapi.yaml
+This server implements the REST API contract (the endpoints tagged `Authz`) required by [ProFTPD mod_auth_rest](https://github.com/kinjelom/proftpd_mod_auth_rest).
 
 ## Dev
 
 This project follows an **OpenAPI-first** approach.
 Development workflow looks like this:
 
-1. **Design first** – update [`openapi.yaml`](internal/app/docs/openapi.yaml) to define or change your API (endpoints, schemas,
-   security).
-2. **Generate code** – run [`oapi-codegen`](oapi-codegen.sh) to regenerate the Go client/server interfaces and
-   client/types from the spec.
+1. **Design first** – update [`openapi.yaml`](internal/app/docs/openapi.yaml) to define or change your API (endpoints, schemas, security).
+2. **Generate code** – run [`oapi-codegen`](oapi-codegen.sh) to regenerate the Go client/server interfaces and client/types from the spec.
 3. **Implement interfaces** – implement the generated interfaces using your business logic.
 
 This way, the OpenAPI contract is always the single source of truth, and the Go code is guaranteed to stay in sync.
